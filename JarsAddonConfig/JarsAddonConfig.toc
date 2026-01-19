@@ -1,0 +1,9 @@
+## Interface: 120001
+## Title: Jar's Addon Config
+## Notes: Central configuration launcher for all Jar's addons
+## Author: Jar
+## Version: 1.0.0
+## SavedVariables: JarsAddonConfigDB
+## OptionalDeps: juf, JarsCastbar, JarsMouseCastbar, JarsMouseActionBars, JarsG13Bars, JarsFontChanger, JarsErrorTrap
+
+JarsAddonConfig.lua
