@@ -1,4 +1,4 @@
-## Interface: 120001
+## Interface: 120001, 120000
 ## Title: Jar's Addon Config
 ## Notes: Central configuration launcher for all Jar's addons
 ## Author: Jar
