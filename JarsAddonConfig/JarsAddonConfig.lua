@@ -16,6 +16,7 @@ local addons = {
     { frameName = "JG13_ConfigFrame", name = "Jar's G13 Bars" },
     { frameName = "JFC_ConfigFrame", name = "Jar's Font Changer" },
     { frameName = "JET_ErrorFrame", name = "Jar's Error Trap" },
+    { slashCommand = "/jrf", name = "Jar's Raid Frames" },
 }
 
 -- Forward declaration
@@ -136,11 +137,18 @@ CreateConfigFrame = function()
         openButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yOffset)
         openButton:SetText("Open")
         openButton:SetScript("OnClick", function()
-            local configFrame = _G[addon.frameName]
-            if configFrame then
-                configFrame:SetShown(not configFrame:IsShown())
-            else
-                print("|cffff0000" .. addon.name .. " config not found. Make sure the addon is loaded.|r")
+            if addon.slashCommand then
+                -- Execute slash command
+                ChatFrame1EditBox:SetText(addon.slashCommand)
+                ChatEdit_SendText(ChatFrame1EditBox, 0)
+            elseif addon.frameName then
+                -- Toggle frame by name
+                local configFrame = _G[addon.frameName]
+                if configFrame then
+                    configFrame:SetShown(not configFrame:IsShown())
+                else
+                    print("|cffff0000" .. addon.name .. " config not found. Make sure the addon is loaded.|r")
+                end
             end
         end)
         
