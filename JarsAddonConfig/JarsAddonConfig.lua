@@ -17,6 +17,8 @@ local addons = {
     { frameName = "JFC_ConfigFrame", name = "Jar's Font Changer" },
     { frameName = "JET_ErrorFrame", name = "Jar's Error Trap" },
     { slashCommand = "/jrf", name = "Jar's Raid Frames" },
+    { frameName = "JarsCoolDownConfig", name = "Jar's Cooldowns" },
+    { frameName = "JarsMonkStaxConfig", name = "Jar's Monk Stax" },
 }
 
 -- Forward declaration
