@@ -19,6 +19,7 @@ local addons = {
     { frameName = "JarsRaidFramesConfig", name = "Jar's Raid Frames" },
     { frameName = "JarsCoolDownConfig", name = "Jar's Cooldowns" },
     { frameName = "JarsMonkStaxConfig", name = "Jar's Monk Stax" },
+    { frameName = "JET_ConfigFrame", name = "Jar's Easy Tracker" },
 }
 
 -- Forward declaration
