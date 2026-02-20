@@ -16,10 +16,10 @@ local addons = {
     { frameName = "JG13_ConfigFrame", name = "Jar's G13 Bars" },
     { frameName = "JFC_ConfigFrame", name = "Jar's Font Changer" },
     { frameName = "JET_ErrorFrame", name = "Jar's Error Trap" },
-    { frameName = "JarsRaidFramesConfig", name = "Jar's Raid Frames" },
-    { frameName = "JarsCoolDownConfig", name = "Jar's Cooldowns" },
-    { frameName = "JarsMonkStaxConfig", name = "Jar's Monk Stax" },
-    { frameName = "JET_ConfigFrame", name = "Jar's Easy Tracker" },
+    { func = function() JarsRaid_OpenConfig() end,          name = "Jar's Raid" },
+    { frameName = "JarsCoolDownConfig",                     name = "Jar's Cooldowns" },
+    { frameName = "JarsMonkStaxConfig",                     name = "Jar's Monk Stax" },
+    { func = function() JarsEasyTracker_OpenConfig() end,   name = "Jar's Easy Tracker" },
 }
 
 -- Forward declaration
@@ -107,16 +107,174 @@ local function CreateMinimapIcon()
     return icon
 end
 
+-- Modern dark UI colour palette
+local UI = {
+    bg        = { 0.10, 0.10, 0.12, 0.95 },
+    header    = { 0.13, 0.13, 0.16, 1 },
+    accent    = { 0.30, 0.75, 0.75, 1 },
+    accentDim = { 0.20, 0.50, 0.50, 1 },
+    text      = { 0.90, 0.90, 0.90, 1 },
+    textDim   = { 0.55, 0.55, 0.58, 1 },
+    section   = { 0.16, 0.16, 0.19, 1 },
+    border    = { 0.22, 0.22, 0.26, 1 },
+    sliderBg  = { 0.18, 0.18, 0.22, 1 },
+    sliderFill= { 0.30, 0.75, 0.75, 0.6 },
+    btnNormal = { 0.18, 0.18, 0.22, 1 },
+    btnHover  = { 0.24, 0.24, 0.28, 1 },
+    btnPress  = { 0.14, 0.14, 0.17, 1 },
+    checkOn   = { 0.30, 0.75, 0.75, 1 },
+    checkOff  = { 0.22, 0.22, 0.26, 1 },
+}
+
+local FONT = "Fonts\\FRIZQT__.TTF"
+
+local backdrop_main = {
+    bgFile   = "Interface\\BUTTONS\\WHITE8X8",
+    edgeFile = "Interface\\BUTTONS\\WHITE8X8",
+    edgeSize = 1,
+}
+
+-- ---------------------------------------------------------------------------
+-- UI Helpers
+-- ---------------------------------------------------------------------------
+
+local function CreateSectionHeader(parent, text)
+    local container = CreateFrame("Frame", nil, parent)
+    container:SetHeight(20)
+
+    local label = container:CreateFontString(nil, "OVERLAY")
+    label:SetFont(FONT, 10, "")
+    label:SetTextColor(unpack(UI.textDim))
+    label:SetPoint("LEFT", 0, 0)
+    label:SetText(string.upper(text))
+    container.label = label
+
+    local line = container:CreateTexture(nil, "ARTWORK")
+    line:SetHeight(1)
+    line:SetPoint("LEFT", label, "RIGHT", 6, 0)
+    line:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+    line:SetColorTexture(unpack(UI.border))
+    container.line = line
+
+    return container
+end
+
+local function CreateModernButton(parent, text, width, height, onClick)
+    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    btn:SetSize(width, height)
+    btn:SetBackdrop(backdrop_main)
+    btn:SetBackdropColor(unpack(UI.btnNormal))
+    btn:SetBackdropBorderColor(unpack(UI.border))
+
+    btn.label = btn:CreateFontString(nil, "OVERLAY")
+    btn.label:SetFont(FONT, 11, "")
+    btn.label:SetTextColor(unpack(UI.accent))
+    btn.label:SetPoint("CENTER")
+    btn.label:SetText(text)
+
+    -- Convenience wrapper so callers can use btn:SetText()
+    btn.SetText = function(self, t) self.label:SetText(t) end
+
+    btn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(UI.btnHover))
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(UI.btnNormal))
+    end)
+    btn:SetScript("OnMouseDown", function(self)
+        self:SetBackdropColor(unpack(UI.btnPress))
+    end)
+    btn:SetScript("OnMouseUp", function(self)
+        self:SetBackdropColor(unpack(UI.btnHover))
+    end)
+    if onClick then
+        btn:SetScript("OnClick", onClick)
+    end
+
+    return btn
+end
+
+local function CreateModernSlider(parent, name, labelText, minVal, maxVal, curVal, step, width, formatFunc, onChange)
+    local container = CreateFrame("Frame", nil, parent)
+    container:SetSize(width, 40)
+
+    -- Label
+    local label = container:CreateFontString(nil, "OVERLAY")
+    label:SetFont(FONT, 11, "")
+    label:SetTextColor(unpack(UI.text))
+    label:SetPoint("TOPLEFT", 0, 0)
+    label:SetText(labelText)
+
+    -- Value readout
+    local valText = container:CreateFontString(nil, "OVERLAY")
+    valText:SetFont(FONT, 11, "")
+    valText:SetTextColor(unpack(UI.accent))
+    valText:SetPoint("TOPRIGHT", 0, 0)
+    container.valText = valText
+
+    -- Track background
+    local trackBg = container:CreateTexture(nil, "BACKGROUND")
+    trackBg:SetHeight(4)
+    trackBg:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -6)
+    trackBg:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -16)
+    trackBg:SetColorTexture(unpack(UI.sliderBg))
+
+    -- Fill overlay (drawn on the slider itself below)
+    local slider = CreateFrame("Slider", name, container, "MinimalSliderTemplate")
+    slider:SetPoint("TOPLEFT", trackBg, "TOPLEFT", 0, 0)
+    slider:SetPoint("BOTTOMRIGHT", trackBg, "BOTTOMRIGHT", 0, 0)
+    slider:SetMinMaxValues(minVal, maxVal)
+    slider:SetValueStep(step)
+    slider:SetObeyStepOnDrag(true)
+    slider:SetValue(curVal)
+    container.slider = slider
+
+    -- Teal fill behind current value
+    local fill = slider:CreateTexture(nil, "ARTWORK")
+    fill:SetHeight(4)
+    fill:SetPoint("LEFT", trackBg, "LEFT", 0, 0)
+    fill:SetColorTexture(unpack(UI.sliderFill))
+
+    -- Thumb
+    local thumb = slider:GetThumbTexture()
+    if thumb then
+        thumb:SetSize(14, 14)
+        thumb:SetColorTexture(unpack(UI.accent))
+    end
+
+    local function UpdateFill()
+        local pct = (slider:GetValue() - minVal) / (maxVal - minVal)
+        fill:SetWidth(math.max(1, pct * trackBg:GetWidth()))
+    end
+
+    local function UpdateValue(_, value)
+        valText:SetText(formatFunc and formatFunc(value) or string.format("%.2f", value))
+        UpdateFill()
+        if onChange then onChange(value) end
+    end
+
+    slider:SetScript("OnValueChanged", UpdateValue)
+    slider:HookScript("OnShow", UpdateFill)
+    UpdateValue(nil, curVal)
+
+    return container
+end
+
+-- ---------------------------------------------------------------------------
 -- Create the main configuration window
+-- ---------------------------------------------------------------------------
 CreateConfigFrame = function()
     if configFrame then
         return configFrame
     end
 
     -- Main frame
-    local frame = CreateFrame("Frame", "JarsAddonConfigFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(400, 60 + (#addons * 35) + 20)
+    local frame = CreateFrame("Frame", "JarsAddonConfigFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(400, 560)
     frame:SetPoint("CENTER")
+    frame:SetBackdrop(backdrop_main)
+    frame:SetBackdropColor(unpack(UI.bg))
+    frame:SetBackdropBorderColor(unpack(UI.border))
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -124,24 +282,70 @@ CreateConfigFrame = function()
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetFrameStrata("DIALOG")
     frame:SetScale(JarsAddonConfigDB.scale or 1.0)
-    
-    -- Title
-    frame.title = frame:CreateFontString(nil, "OVERLAY")
-    frame.title:SetFontObject("GameFontHighlight")
-    frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
-    frame.title:SetText("Jar's Addon Config")
-    
-    -- Create buttons for each addon
-    local yOffset = -30
+    tinsert(UISpecialFrames, "JarsAddonConfigFrame")
+
+    -- Title bar
+    local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    titleBar:SetHeight(30)
+    titleBar:SetPoint("TOPLEFT", 0, 0)
+    titleBar:SetPoint("TOPRIGHT", 0, 0)
+    titleBar:SetBackdrop(backdrop_main)
+    titleBar:SetBackdropColor(unpack(UI.header))
+    titleBar:SetBackdropBorderColor(unpack(UI.border))
+
+    local titleText = titleBar:CreateFontString(nil, "OVERLAY")
+    titleText:SetFont(FONT, 13, "")
+    titleText:SetTextColor(unpack(UI.accent))
+    titleText:SetPoint("LEFT", 12, 0)
+    titleText:SetText("Jar's Addon Config")
+    frame.title = titleText
+
+    -- Close button (minimal "x")
+    local closeBtn = CreateFrame("Button", nil, titleBar)
+    closeBtn:SetSize(30, 30)
+    closeBtn:SetPoint("RIGHT", -2, 0)
+    closeBtn.label = closeBtn:CreateFontString(nil, "OVERLAY")
+    closeBtn.label:SetFont(FONT, 14, "")
+    closeBtn.label:SetTextColor(unpack(UI.textDim))
+    closeBtn.label:SetPoint("CENTER", 0, 0)
+    closeBtn.label:SetText("x")
+    closeBtn:SetScript("OnEnter", function(self) self.label:SetTextColor(1, 0.35, 0.35, 1) end)
+    closeBtn:SetScript("OnLeave", function(self) self.label:SetTextColor(unpack(UI.textDim)) end)
+    closeBtn:SetScript("OnClick", function() frame:Hide() end)
+
+    -- Scroll frame
+    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", 20, -36)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -28, 8)
+
+    local content = CreateFrame("Frame", nil, scrollFrame)
+    content:SetWidth(scrollFrame:GetWidth() or 340)
+    scrollFrame:SetScrollChild(content)
+
+    -- We need to set the content width after the scroll frame is sized
+    frame:HookScript("OnShow", function()
+        content:SetWidth(scrollFrame:GetWidth())
+    end)
+
+    -- -----------------------------------------------------------------------
+    -- Populate content
+    -- -----------------------------------------------------------------------
+    local yOffset = 0
+
+    -- Section: Addons
+    local addonHeader = CreateSectionHeader(content, "Addons")
+    addonHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+    addonHeader:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    yOffset = yOffset - 26
+
     for i, addon in ipairs(addons) do
-        -- Open button
-        local openButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        openButton:SetSize(70, 25)
-        openButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yOffset)
-        openButton:SetText("Open")
-        openButton:SetScript("OnClick", function()
-            if addon.frameName then
-                -- Toggle frame by name
+        local btn = CreateModernButton(content, addon.name, 330, 28, function()
+            if addon.func then
+                local ok, err = pcall(addon.func)
+                if not ok then
+                    print("|cffff0000" .. addon.name .. " config not found. Make sure the addon is loaded.|r")
+                end
+            elseif addon.frameName then
                 local targetFrame = _G[addon.frameName]
                 if targetFrame then
                     targetFrame:SetShown(not targetFrame:IsShown())
@@ -150,47 +354,40 @@ CreateConfigFrame = function()
                 end
             end
         end)
-        
-        -- Addon name label
-        local nameLabel = frame:CreateFontString(nil, "OVERLAY")
-        nameLabel:SetFontObject("GameFontNormal")
-        nameLabel:SetPoint("LEFT", openButton, "RIGHT", 10, 0)
-        nameLabel:SetText(addon.name)
-        
-        yOffset = yOffset - 35
+        btn:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+        yOffset = yOffset - 34
     end
-    
-    -- Scale slider
+
+    -- Section: Settings
     yOffset = yOffset - 10
-    local scaleLabel = frame:CreateFontString(nil, "OVERLAY")
-    scaleLabel:SetFontObject("GameFontNormal")
-    scaleLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 20, yOffset)
-    scaleLabel:SetText("Window Scale:")
-    
-    local scaleSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
-    scaleSlider:SetPoint("LEFT", scaleLabel, "RIGHT", 10, 0)
-    scaleSlider:SetMinMaxValues(0.5, 1.5)
-    scaleSlider:SetValue(JarsAddonConfigDB.scale or 1.0)
-    scaleSlider:SetValueStep(0.05)
-    scaleSlider:SetObeyStepOnDrag(true)
-    scaleSlider:SetWidth(200)
-    scaleSlider.tooltipText = "Adjust the scale of this window"
-    
-    -- Slider value text
-    local scaleValue = frame:CreateFontString(nil, "OVERLAY")
-    scaleValue:SetFontObject("GameFontNormalSmall")
-    scaleValue:SetPoint("LEFT", scaleSlider, "RIGHT", 5, 0)
-    scaleValue:SetText(string.format("%.2f", JarsAddonConfigDB.scale or 1.0))
-    
-    scaleSlider:SetScript("OnValueChanged", function(self, value)
-        JarsAddonConfigDB.scale = value
-        frame:SetScale(value)
-        scaleValue:SetText(string.format("%.2f", value))
-    end)
-    
+    local settingsHeader = CreateSectionHeader(content, "Settings")
+    settingsHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+    settingsHeader:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    yOffset = yOffset - 30
+
+    local scaleSlider = CreateModernSlider(
+        content,
+        "JAC_ScaleSlider",
+        "Window Scale",
+        0.5, 1.5,
+        JarsAddonConfigDB.scale or 1.0,
+        0.05,
+        330,
+        function(v) return string.format("%.2f", v) end,
+        function(value)
+            JarsAddonConfigDB.scale = value
+            frame:SetScale(value)
+        end
+    )
+    scaleSlider:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+    yOffset = yOffset - 50
+
+    -- Set content height so scroll works
+    content:SetHeight(math.abs(yOffset) + 10)
+
     -- Initially hide the frame
     frame:Hide()
-    
+
     configFrame = frame
     return frame
 end
