@@ -18,7 +18,7 @@ local addons = {
     { frameName = "JET_ErrorFrame", name = "Jar's Error Trap" },
     { func = function() JarsRaid_OpenConfig() end,          name = "Jar's Raid" },
     { frameName = "JarsCoolDownConfig",                     name = "Jar's Cooldowns" },
-    { frameName = "JarsMonkStaxConfig",                     name = "Jar's Monk Stax" },
+    { func = function() JarsBags_OpenConfig() end,          name = "Jar's Bags" },
     { func = function() JarsEasyTracker_OpenConfig() end,   name = "Jar's Easy Tracker" },
 }
 
@@ -382,8 +382,177 @@ CreateConfigFrame = function()
     scaleSlider:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
     yOffset = yOffset - 50
 
-    -- Set content height so scroll works
-    content:SetHeight(math.abs(yOffset) + 10)
+    -- -----------------------------------------------------------------------
+    -- Section: Addon Memory Usage
+    -- -----------------------------------------------------------------------
+    yOffset = yOffset - 10
+    local memHeader = CreateSectionHeader(content, "Addon Memory Usage")
+    memHeader:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+    memHeader:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    yOffset = yOffset - 26
+
+    -- Container for memory rows
+    local memContainer = CreateFrame("Frame", nil, content)
+    memContainer:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
+    memContainer:SetPoint("RIGHT", content, "RIGHT", 0, 0)
+    memContainer:SetHeight(1) -- resized dynamically
+
+    local memRows = {}
+    local MEM_ROW_HEIGHT = 18
+    local memSortBy = "memory" -- "memory" or "name"
+
+    local function FormatMemory(kb)
+        if kb >= 1024 then
+            return string.format("%.1f MB", kb / 1024)
+        else
+            return string.format("%.0f KB", kb)
+        end
+    end
+
+    local function CreateMemRow(parent, index)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetHeight(MEM_ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -((index - 1) * MEM_ROW_HEIGHT))
+        row:SetPoint("RIGHT", parent, "RIGHT", 0, 0)
+
+        -- Alternating row background
+        row.bg = row:CreateTexture(nil, "BACKGROUND")
+        row.bg:SetAllPoints()
+        if index % 2 == 0 then
+            row.bg:SetColorTexture(0.14, 0.14, 0.17, 0.5)
+        else
+            row.bg:SetColorTexture(0, 0, 0, 0)
+        end
+
+        row.nameText = row:CreateFontString(nil, "OVERLAY")
+        row.nameText:SetFont(FONT, 10, "")
+        row.nameText:SetTextColor(unpack(UI.text))
+        row.nameText:SetJustifyH("LEFT")
+        row.nameText:SetPoint("LEFT", 4, 0)
+        row.nameText:SetPoint("RIGHT", row, "RIGHT", -70, 0)
+        row.nameText:SetWordWrap(false)
+
+        row.memText = row:CreateFontString(nil, "OVERLAY")
+        row.memText:SetFont(FONT, 10, "")
+        row.memText:SetTextColor(unpack(UI.accent))
+        row.memText:SetJustifyH("RIGHT")
+        row.memText:SetPoint("RIGHT", -4, 0)
+        row.memText:SetWidth(64)
+
+        -- Memory bar
+        row.bar = row:CreateTexture(nil, "ARTWORK")
+        row.bar:SetHeight(3)
+        row.bar:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 4, 1)
+        row.bar:SetColorTexture(unpack(UI.sliderFill))
+
+        return row
+    end
+
+    local function RefreshMemoryUsage()
+        UpdateAddOnMemoryUsage()
+        local numAddons = C_AddOns.GetNumAddOns()
+        local addonData = {}
+
+        for i = 1, numAddons do
+            local name = C_AddOns.GetAddOnInfo(i)
+            local loaded = C_AddOns.IsAddOnLoaded(i)
+            if loaded then
+                local mem = GetAddOnMemoryUsage(i)
+                table.insert(addonData, { name = name, memory = mem })
+            end
+        end
+
+        -- Sort by memory descending
+        if memSortBy == "memory" then
+            table.sort(addonData, function(a, b) return a.memory > b.memory end)
+        else
+            table.sort(addonData, function(a, b) return a.name < b.name end)
+        end
+
+        -- Find max memory for bar scaling
+        local maxMem = 0
+        for _, d in ipairs(addonData) do
+            if d.memory > maxMem then maxMem = d.memory end
+        end
+        if maxMem == 0 then maxMem = 1 end
+
+        -- Create/update rows
+        local totalMem = 0
+        for i, d in ipairs(addonData) do
+            if not memRows[i] then
+                memRows[i] = CreateMemRow(memContainer, i)
+            end
+            local row = memRows[i]
+            row.nameText:SetText(d.name)
+            row.memText:SetText(FormatMemory(d.memory))
+
+            -- Color high-memory addons
+            if d.memory > 10240 then -- >10MB
+                row.memText:SetTextColor(1, 0.4, 0.4)
+            elseif d.memory > 4096 then -- >4MB
+                row.memText:SetTextColor(1, 0.75, 0.3)
+            else
+                row.memText:SetTextColor(unpack(UI.accent))
+            end
+
+            -- Bar width proportional to max
+            local barWidth = math.max(1, (d.memory / maxMem) * 260)
+            row.bar:SetWidth(barWidth)
+
+            row:SetPoint("TOPLEFT", memContainer, "TOPLEFT", 0, -((i - 1) * MEM_ROW_HEIGHT))
+            row:Show()
+            totalMem = totalMem + d.memory
+        end
+
+        -- Hide extra rows
+        for i = #addonData + 1, #memRows do
+            memRows[i]:Hide()
+        end
+
+        -- Update container height
+        memContainer:SetHeight(#addonData * MEM_ROW_HEIGHT)
+
+        -- Update total
+        if frame.totalMemText then
+            frame.totalMemText:SetText("Total: " .. FormatMemory(totalMem))
+        end
+
+        -- Recalculate content height
+        local memBottom = 26 + (#addonData * MEM_ROW_HEIGHT) + 30 -- header + rows + total/buttons
+        content:SetHeight(math.abs(yOffset) + memBottom + 10)
+    end
+
+    -- Total memory display
+    local totalMemText = content:CreateFontString(nil, "OVERLAY")
+    totalMemText:SetFont(FONT, 11, "")
+    totalMemText:SetTextColor(unpack(UI.text))
+    totalMemText:SetJustifyH("LEFT")
+    totalMemText:SetPoint("TOPLEFT", memContainer, "BOTTOMLEFT", 4, -6)
+    frame.totalMemText = totalMemText
+
+    -- Refresh button
+    local refreshBtn = CreateModernButton(content, "Refresh", 80, 24, function()
+        RefreshMemoryUsage()
+    end)
+    refreshBtn:SetPoint("LEFT", totalMemText, "RIGHT", 12, 0)
+
+    -- Sort toggle button
+    local sortBtn = CreateModernButton(content, "Sort: Memory", 100, 24, function(self)
+        if memSortBy == "memory" then
+            memSortBy = "name"
+            self:SetText("Sort: Name")
+        else
+            memSortBy = "memory"
+            self:SetText("Sort: Memory")
+        end
+        RefreshMemoryUsage()
+    end)
+    sortBtn:SetPoint("LEFT", refreshBtn, "RIGHT", 6, 0)
+
+    -- Refresh when frame is shown
+    frame:HookScript("OnShow", function()
+        RefreshMemoryUsage()
+    end)
 
     -- Initially hide the frame
     frame:Hide()
