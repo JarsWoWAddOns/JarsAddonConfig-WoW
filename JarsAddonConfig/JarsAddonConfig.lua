@@ -1,26 +1,67 @@
 -- Jar's Addon Config - Central configuration launcher for all Jar's addons
--- Version 1.0.0
+-- Version 1.1.0
 
 local addonName = "JarsAddonConfig"
 local configFrame = nil
 
 -- Saved variables
-JarsAddonConfigDB = JarsAddonConfigDB or { scale = 1.0, minimapAngle = 45 }
+JarsAddonConfigDB = JarsAddonConfigDB or { scale = 1.0, minimapAngle = math.rad(45) }
 
 -- List of Jar's addons with their config frame names and display names
+-- addon = folder name for IsAddOnLoaded, open = <Addon>_OpenConfig global (used when it exists)
 local addons = {
-    { frameName = "JUF_ConfigFrame", name = "Jar's Unit Frames" },
-    { frameName = "JarsCastbarConfig", name = "Jar's Cast Bar" },
-    { frameName = "JMCB_ConfigFrame", name = "Jar's Mouse Cast Bar" },
-    { frameName = "JMAB_ConfigFrame", name = "Jar's Mouse Action Bars" },
-    { frameName = "JG13_ConfigFrame", name = "Jar's G13 Bars" },
-    { frameName = "JFC_ConfigFrame", name = "Jar's Font Changer" },
-    { frameName = "JET_ErrorFrame", name = "Jar's Error Trap" },
-    { func = function() JarsRaid_OpenConfig() end,          name = "Jar's Raid" },
-    { frameName = "JarsCoolDownConfig",                     name = "Jar's Cooldowns" },
-    { func = function() JarsBags_OpenConfig() end,          name = "Jar's Bags" },
-    { func = function() JarsEasyTracker_OpenConfig() end,   name = "Jar's Easy Tracker" },
+    { addon = "juf",                 open = "JarsUnitFrames_OpenConfig", frameName = "JUF_ConfigFrame",    name = "Jar's Unit Frames" },
+    { addon = "JarsCastbar",         open = "JarsCastbar_OpenConfig",     frameName = "JarsCastbarConfig",  name = "Jar's Cast Bar" },
+    { addon = "JarsMouseCastbar",    open = "JarsMouseCastbar_OpenConfig", frameName = "JMCB_ConfigFrame",   name = "Jar's Mouse Cast Bar" },
+    { addon = "JarsMouseActionBars", open = "JarsMouseActionBars_OpenConfig", frameName = "JMAB_ConfigFrame",   name = "Jar's Mouse Action Bars" },
+    { addon = "JarsG13Bars",         open = "JarsG13Bars_OpenConfig",     frameName = "JG13_ConfigFrame",   name = "Jar's G13 Bars" },
+    { addon = "JarsFontChanger",     open = "JarsFontChanger_OpenConfig", frameName = "JFC_ConfigFrame",    name = "Jar's Font Changer" },
+    { addon = "JarsErrorTrap",       open = "JarsErrorTrap_OpenConfig",   frameName = "JET_ErrorFrame",     name = "Jar's Error Trap" },
+    -- { func = function() JarsRaid_OpenConfig() end,          name = "Jar's Raid" },
+    { addon = "JarsRaid",            open = "JarsRaid_OpenConfig",                                          name = "Jar's Raid" },
+    { addon = "JarsCoolDown",        open = "JarsCoolDown_OpenConfig",    frameName = "JarsCoolDownConfig", name = "Jar's Cooldowns" },
+    { addon = "JarsBags",            open = "JarsBags_OpenConfig",                                          name = "Jar's Bags" },
+    { addon = "JarsEasyTracker",     open = "JarsEasyTracker_OpenConfig",                                   name = "Jar's Easy Tracker" },
 }
+
+-- tell disabled apart from loaded-but-broken
+local function ReportMissing(entry)
+    if entry.addon and not C_AddOns.IsAddOnLoaded(entry.addon) then
+        print("|cffff0000" .. entry.name .. " is not loaded (disabled or not installed).|r")
+    else
+        print("|cffff0000" .. entry.name .. " is loaded but its config wasn't found.|r")
+    end
+end
+
+local function OpenAddonConfig(entry)
+    local target = entry.frameName and _G[entry.frameName]
+    -- keep the old toggle, close it if its already up
+    if target and target:IsShown() then
+        target:Hide()
+        return
+    end
+
+    local open = entry.open and _G[entry.open]
+    if type(open) == "function" then
+        open()
+    elseif target then
+        target:Show()
+    else
+        ReportMissing(entry)
+        return
+    end
+
+    target = entry.frameName and _G[entry.frameName]
+    if target and target:IsShown() then
+        target:Raise()
+    end
+end
+
+local function PositionIcon(icon, angle)
+    local radius = Minimap:GetWidth() / 2 + 5
+    icon:ClearAllPoints()
+    icon:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * radius, math.sin(angle) * radius)
+end
 
 -- Forward declaration
 local CreateConfigFrame
@@ -36,23 +77,18 @@ local function CreateMinimapIcon()
     icon:RegisterForClicks("LeftButtonUp")
     
     -- Position on minimap
-    local angle = JarsAddonConfigDB.minimapAngle or 45
-    local radius = 110
-    local x = math.cos(angle) * radius + 10
-    local y = math.sin(angle) * radius - 10
-    icon:SetPoint("CENTER", Minimap, "CENTER", x, y)
-    
-    
+    PositionIcon(icon, JarsAddonConfigDB.minimapAngle or math.rad(45))
+
     -- Background
     icon.bg = icon:CreateTexture(nil, "BACKGROUND")
     icon.bg:SetSize(20, 20)
-    icon.bg:SetPoint("CENTER", -10, 10)
+    icon.bg:SetPoint("CENTER")
     icon.bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
     
     -- Icon texture (settings/gear icon)
     icon.texture = icon:CreateTexture(nil, "ARTWORK")
     icon.texture:SetSize(18, 18)
-    icon.texture:SetPoint("CENTER", -10, 10)
+    icon.texture:SetPoint("CENTER")
     icon.texture:SetTexture("Interface\\Buttons\\UI-GuildButton-PublicNote-Up")
     
     -- Border
@@ -85,17 +121,12 @@ local function CreateMinimapIcon()
     icon:SetScript("OnDragStart", function(self)
         self:SetScript("OnUpdate", function(self)
             local mx, my = Minimap:GetCenter()
-            mx = mx + 10
-            my = my - 10
             local px, py = GetCursorPosition()
             local scale = Minimap:GetEffectiveScale()
             px, py = px / scale, py / scale
-            
+
             local angle = math.atan2(py - my, px - mx)
-            local radius = 110
-            local x = math.cos(angle) * radius + 10
-            local y = math.sin(angle) * radius - 10
-            self:SetPoint("CENTER", Minimap, "CENTER", x, y)
+            PositionIcon(self, angle)
             
             JarsAddonConfigDB.minimapAngle = angle
         end)
@@ -340,19 +371,7 @@ CreateConfigFrame = function()
 
     for i, addon in ipairs(addons) do
         local btn = CreateModernButton(content, addon.name, 330, 28, function()
-            if addon.func then
-                local ok, err = pcall(addon.func)
-                if not ok then
-                    print("|cffff0000" .. addon.name .. " config not found. Make sure the addon is loaded.|r")
-                end
-            elseif addon.frameName then
-                local targetFrame = _G[addon.frameName]
-                if targetFrame then
-                    targetFrame:SetShown(not targetFrame:IsShown())
-                else
-                    print("|cffff0000" .. addon.name .. " config not found. Make sure the addon is loaded.|r")
-                end
-            end
+            OpenAddonConfig(addon)
         end)
         btn:SetPoint("TOPLEFT", content, "TOPLEFT", 0, yOffset)
         yOffset = yOffset - 34
@@ -448,8 +467,10 @@ CreateConfigFrame = function()
         return row
     end
 
-    local function RefreshMemoryUsage()
-        UpdateAddOnMemoryUsage()
+    local function RefreshMemoryUsage(rescan)
+        if rescan then
+            UpdateAddOnMemoryUsage()
+        end
         local numAddons = C_AddOns.GetNumAddOns()
         local addonData = {}
 
@@ -532,7 +553,7 @@ CreateConfigFrame = function()
 
     -- Refresh button
     local refreshBtn = CreateModernButton(content, "Refresh", 80, 24, function()
-        RefreshMemoryUsage()
+        RefreshMemoryUsage(true)
     end)
     refreshBtn:SetPoint("LEFT", totalMemText, "RIGHT", 12, 0)
 
@@ -549,9 +570,13 @@ CreateConfigFrame = function()
     end)
     sortBtn:SetPoint("LEFT", refreshBtn, "RIGHT", 6, 0)
 
-    -- Refresh when frame is shown
+    -- Refresh when frame is shown, one frame later so opening doesnt hitch
     frame:HookScript("OnShow", function()
-        RefreshMemoryUsage()
+        C_Timer.After(0, function()
+            if frame:IsShown() then
+                RefreshMemoryUsage(true)
+            end
+        end)
     end)
 
     -- Initially hide the frame
